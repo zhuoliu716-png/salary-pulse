@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { monthlyInsurance, simulateYear, effectiveBase } from '../lib/tax';
+import { monthlyInsurance, simulateYear, insuranceBreakdown } from '../lib/tax';
 import type { InsuranceRates, SalaryConfig } from '../lib/tax';
+import { CITY_POLICIES, getPolicy } from '../lib/policy';
 import { formatMoney } from '../lib/format';
 
 interface Props {
@@ -50,6 +51,7 @@ export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) 
   const months = simulateYear(config);
   const cur = months[new Date().getMonth()];
   const insurance = monthlyInsurance(config);
+  const rows = insuranceBreakdown(config);
   const [copied, setCopied] = useState(false);
 
   const copyShareUrl = async () => {
@@ -101,7 +103,17 @@ export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) 
         </Section>
 
         <Section title="五险一金（个人缴纳）">
-          <Field label="缴费基数（元，留空 = 跟随月薪）">
+          <Field label="城市政策">
+            <select value={config.city} onChange={(e) => update({ city: e.target.value })}>
+              {CITY_POLICIES.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <p className="share-hint">{getPolicy(config.city).note}</p>
+          <Field label="缴费基数（元，留空 = 跟随月薪；按城市政策自动封顶保底）">
             <input
               type="number"
               min={0}
@@ -217,8 +229,17 @@ export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) 
               <span>税前月薪</span>
               <span>¥ {formatMoney(config.monthlySalary)}</span>
             </div>
+            {rows.map((r) => (
+              <div className="bd-row" key={r.key}>
+                <span>
+                  {r.label} · 基数 {formatMoney(r.base)}
+                  {r.clamped ? '（已调整）' : ''}
+                </span>
+                <span>− ¥ {formatMoney(r.amount)}</span>
+              </div>
+            ))}
             <div className="bd-row">
-              <span>五险一金 · 基数 {formatMoney(effectiveBase(config))}</span>
+              <span>五险一金合计</span>
               <span>− ¥ {formatMoney(insurance)}</span>
             </div>
             <div className="bd-row">

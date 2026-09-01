@@ -1,3 +1,6 @@
+import { getPolicy, INSURANCE_LABELS } from './policy';
+import type { InsuranceKey } from './policy';
+
 export interface InsuranceRates {
   pension: number; // 养老保险（个人）
   medical: number; // 医疗保险（个人）
@@ -10,6 +13,7 @@ export type AccrualMode = 'work' | 'always';
 export interface SalaryConfig {
   monthlySalary: number;
   insuranceBase: number | null; // null = 跟随月薪
+  city: string; // 城市政策 id，见 policy.ts
   rates: InsuranceRates;
   specialDeduction: number;
   startMonth: number; // 入职月份 1-12
@@ -22,7 +26,8 @@ export interface SalaryConfig {
 export const DEFAULT_CONFIG: SalaryConfig = {
   monthlySalary: 20000,
   insuranceBase: null,
-  rates: { pension: 0.08, medical: 0.02, unemployment: 0.005, housingFund: 0.12 },
+  city: 'shenzhen',
+  rates: { pension: 0.08, medical: 0.02, unemployment: 0.002, housingFund: 0.12 },
   specialDeduction: 0,
   startMonth: 1,
   accrualMode: 'work',
@@ -47,9 +52,32 @@ export function effectiveBase(cfg: SalaryConfig): number {
   return cfg.insuranceBase ?? cfg.monthlySalary;
 }
 
+export interface InsuranceRow {
+  key: InsuranceKey;
+  label: string;
+  base: number;
+  amount: number;
+  clamped: boolean;
+}
+
+export function insuranceBreakdown(cfg: SalaryConfig): InsuranceRow[] {
+  const { limits } = getPolicy(cfg.city);
+  const raw = effectiveBase(cfg);
+  return (Object.keys(cfg.rates) as InsuranceKey[]).map((key) => {
+    const { floor, cap } = limits[key];
+    const base = Math.min(Math.max(raw, floor), cap);
+    return {
+      key,
+      label: INSURANCE_LABELS[key],
+      base,
+      amount: base * cfg.rates[key],
+      clamped: base !== raw,
+    };
+  });
+}
+
 export function monthlyInsurance(cfg: SalaryConfig): number {
-  const { pension, medical, unemployment, housingFund } = cfg.rates;
-  return effectiveBase(cfg) * (pension + medical + unemployment + housingFund);
+  return insuranceBreakdown(cfg).reduce((sum, row) => sum + row.amount, 0);
 }
 
 export function cumulativeTax(taxable: number): number {
