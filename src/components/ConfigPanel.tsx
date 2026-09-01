@@ -113,17 +113,37 @@ export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) 
             </select>
           </Field>
           <p className="share-hint">{getPolicy(config.city).note}</p>
-          <Field label="缴费基数（元，留空 = 跟随月薪；按城市政策自动封顶保底）">
-            <input
-              type="number"
-              min={0}
-              value={config.insuranceBase ?? ''}
-              placeholder={`跟随月薪 · 当前 ${formatMoney(config.monthlySalary)}`}
-              onChange={(e) =>
-                update({ insuranceBase: e.target.value === '' ? null : Math.max(0, Number(e.target.value)) })
-              }
-            />
-          </Field>
+          {getPolicy(config.city).id !== 'none' && (
+            <div className="mode-row">
+              <div className="segmented">
+                <button
+                  className={config.baseMode === 'salary' ? 'active' : ''}
+                  onClick={() => update({ baseMode: 'salary' })}
+                >
+                  按实际工资
+                </button>
+                <button
+                  className={config.baseMode === 'minimum' ? 'active' : ''}
+                  onClick={() => update({ baseMode: 'minimum' })}
+                >
+                  按最低标准
+                </button>
+              </div>
+            </div>
+          )}
+          {config.baseMode === 'salary' && (
+            <Field label="缴费基数（元，留空 = 跟随月薪；按城市政策自动封顶保底）">
+              <input
+                type="number"
+                min={0}
+                value={config.insuranceBase ?? ''}
+                placeholder={`跟随月薪 · 当前 ${formatMoney(config.monthlySalary)}`}
+                onChange={(e) =>
+                  update({ insuranceBase: e.target.value === '' ? null : Math.max(0, Number(e.target.value)) })
+                }
+              />
+            </Field>
+          )}
           <div className="rate-grid">
             {RATE_FIELDS.map(({ key, label }) => (
               <Field key={key} label={label}>
@@ -135,7 +155,9 @@ export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) 
                     step={0.1}
                     value={+(config.rates[key] * 100).toFixed(2)}
                     onChange={(e) =>
-                      update({ rates: { ...config.rates, [key]: (Number(e.target.value) || 0) / 100 } })
+                      update({
+                        rates: { ...config.rates, [key]: Math.round((Number(e.target.value) || 0) * 100) / 10000 },
+                      })
                     }
                   />
                   <span className="suffix">%</span>

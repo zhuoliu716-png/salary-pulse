@@ -541,6 +541,10 @@ body::after {
   margin-top: 18px;
 }
 
+.mode-row {
+  margin-bottom: 16px;
+}
+
 .segmented {
   display: flex;
   gap: 4px;

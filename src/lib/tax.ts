@@ -14,6 +14,7 @@ export interface SalaryConfig {
   monthlySalary: number;
   insuranceBase: number | null; // null = 跟随月薪
   city: string; // 城市政策 id，见 policy.ts
+  baseMode: 'salary' | 'minimum'; // 按实际工资 / 按城市最低标准
   rates: InsuranceRates;
   specialDeduction: number;
   startMonth: number; // 入职月份 1-12
@@ -27,6 +28,7 @@ export const DEFAULT_CONFIG: SalaryConfig = {
   monthlySalary: 20000,
   insuranceBase: null,
   city: 'shenzhen',
+  baseMode: 'salary',
   rates: { pension: 0.08, medical: 0.02, unemployment: 0.002, housingFund: 0.12 },
   specialDeduction: 0,
   startMonth: 1,
@@ -65,13 +67,14 @@ export function insuranceBreakdown(cfg: SalaryConfig): InsuranceRow[] {
   const raw = effectiveBase(cfg);
   return (Object.keys(cfg.rates) as InsuranceKey[]).map((key) => {
     const { floor, cap } = limits[key];
-    const base = Math.min(Math.max(raw, floor), cap);
+    const target = cfg.baseMode === 'minimum' ? floor : raw;
+    const base = Math.min(Math.max(target, floor), cap);
     return {
       key,
       label: INSURANCE_LABELS[key],
       base,
       amount: base * cfg.rates[key],
-      clamped: base !== raw,
+      clamped: cfg.baseMode !== 'minimum' && base !== raw,
     };
   });
 }
