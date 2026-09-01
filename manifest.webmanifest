@@ -1,0 +1,17 @@
+{
+  "name": "薪水跳动 Salary Pulse",
+  "short_name": "薪水跳动",
+  "description": "实时税后收入，每秒跳动",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#07090f",
+  "theme_color": "#07090f",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
