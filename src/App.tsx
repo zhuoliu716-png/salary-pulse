@@ -1,41 +1,67 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ConfigPanel } from './components/ConfigPanel';
-import { HeroCounter } from './components/HeroCounter';
-import { StatCards } from './components/StatCards';
-import { useConfig } from './hooks/useConfig';
+import { Odometer } from './components/Odometer';
 import { useTicker } from './hooks/useTicker';
+import { formatMoney } from './lib/format';
+import { insuranceBreakdown, simulateYear, DEFAULT_CONFIG } from './lib/tax';
+import type { SalaryConfig } from './lib/tax';
+import { parseConfig } from './lib/validate';
+import { getAppSession, loadProfile, saveProfile, signIn, signUp, signOut, subscribeAuth } from './lib/supabase';
+
+type Tab = 'today' | 'details' | 'settings';
+type Ticker = ReturnType<typeof useTicker>;
+
+function AuthScreen() {
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false); const [notice, setNotice] = useState(''); const [error, setError] = useState('');
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setError(''); setNotice('');
+    try { if (mode === 'login') await signIn(email, password); else await signUp(email, password); }
+    catch (err) { setError(err instanceof Error ? err.message : '请求失败，请重试。'); }
+    setBusy(false);
+  }
+  return <main className="auth-shell"><section className="auth-copy"><div className="brand-lockup"><span className="brand-mark">¥</span><div><strong>薪水跳动</strong><small>SALARY PULSE / 02</small></div></div><p className="kicker">YOUR TIME, ACCOUNTED FOR</p><h1>让每一秒的工作，<em>都有回声。</em></h1><p className="auth-lede">一个安静、准确的收入仪表盘。登录后，你的计薪口径和收入数据只属于你的账号。</p><div className="signal-preview"><div className="signal-label"><span className="signal-dot" />LIVE EARNING SIGNAL</div><strong>¥ 0.0834 <small>/ SEC</small></strong><div className="signal-wave">{Array.from({ length: 34 }, (_, i) => <i key={i} style={{ height: `${18 + ((i * 17) % 35)}%` }} />)}</div></div></section><section className="auth-card"><div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError(''); }}>登录</button><button className={mode === 'signup' ? 'active' : ''} onClick={() => { setMode('signup'); setError(''); }}>注册账号</button></div><div className="auth-heading"><p className="kicker">{mode === 'login' ? 'WELCOME BACK' : 'START YOUR CLOCK'}</p><h2>{mode === 'login' ? '回到你的收入现场' : '建立你的收入现场'}</h2><p>{mode === 'login' ? '输入账号，继续查看实时收入。' : '注册后填写你的薪酬设置，数据会保存到你的账号。'}</p></div><form onSubmit={submit} className="auth-form"><label>邮箱<input type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" /></label><label>密码<input type="password" required minLength={6} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="至少 6 位字符" /></label><button className="button-primary" disabled={busy}>{busy ? '处理中…' : mode === 'login' ? '进入仪表盘' : '创建账号'}</button></form>{error && <p className="form-error" role="alert">{error}</p>}{notice && <p className="form-notice" role="status">{notice}</p>}<p className="auth-foot">你的薪酬数据仅用于当前账号的计算和展示。我们不把金额写入链接。</p></section></main>;
+}
+
+function SettingsView({ config, onSave, onCancel, onDirty, hidden }: { config: SalaryConfig; onSave: (c: SalaryConfig) => Promise<void>; onCancel: () => void; onDirty: (v: boolean) => void; hidden: boolean }) {
+  const [draft, setDraft] = useState(config); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  useEffect(() => setDraft(config), [config]);
+  async function submit(e: React.FormEvent) { e.preventDefault(); setBusy(true); setError(''); try { await onSave(parseConfig(draft)); } catch (err) { setError(err instanceof Error ? err.message : '保存失败，请重试。'); } finally { setBusy(false); } }
+  function update(patch: Partial<SalaryConfig>) { setDraft(c => ({ ...c, ...patch })); onDirty(true); setError(''); }
+  return <form onSubmit={submit} className="settings-view"><div className="page-title"><p className="kicker">CONFIGURATION</p><h1>把计薪口径，<em>设成你的。</em></h1><p>保存后，仪表盘会按当前设置实时重算。</p></div><ConfigPanel open config={draft} update={update} onClose={onCancel} />{error && <p className="form-error" role="alert">{error}</p>}<div className="save-dock"><div><span className="sync-dot" />{busy ? '正在同步到云端' : '修改仅在保存后生效'}</div><button className="button-primary" disabled={busy}>{busy ? '保存中…' : '保存设置'}</button></div><p className="settings-note">当前账号：仅你本人可以读取和修改这套薪酬设置。{hidden ? ' 金额隐私模式已开启。' : ''}</p></form>;
+}
+
+function AppShell({ email, config, onConfig, onSignOut }: { email: string; config: SalaryConfig | null; onConfig: (c: SalaryConfig) => Promise<void>; onSignOut: () => Promise<void> }) {
+  const [tab, setTab] = useState<Tab>('today'); const [hidden, setHidden] = useState(false); const [basis, setBasis] = useState<'net' | 'gross'>('net'); const [dirty, setDirty] = useState(false); const [pending, setPending] = useState<Tab | null>(null); const [toast, setToast] = useState('');
+  const activeConfig = config ?? DEFAULT_CONFIG; const snap = useTicker(activeConfig); const year = simulateYear(activeConfig); const hasConfig = Boolean(config);
+  const grossConfig = useMemo(() => ({ ...activeConfig, city: 'none', insuranceBase: 0, rates: { pension: 0, medical: 0, unemployment: 0, housingFund: 0 }, specialDeduction: 10000000 }), [activeConfig]);
+  const grossSnap = useTicker(grossConfig); const view = basis === 'net' ? snap : grossSnap; const active = new Date().getMonth() + 1 >= activeConfig.startMonth;
+  useEffect(() => { window.scrollTo(0, 0); }, [tab]); useEffect(() => { if (toast) { const timer = window.setTimeout(() => setToast(''), 2600); return () => clearTimeout(timer); } }, [toast]); useEffect(() => { const warn = (e: BeforeUnloadEvent) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty]);
+  function navigate(next: Tab) { if (next === tab) return; if (dirty) { setPending(next); return; } setTab(next); }
+  const value = (n: number, digits = 2) => hidden ? '••••' : `¥ ${formatMoney(n, digits)}`;
+  const status = !active ? '尚未到起薪月份' : activeConfig.accrualMode === 'always' ? '全天分摊中' : ({ working: '上班中，每秒都算数', 'before-work': '还没开工，收入稍后跳动', 'after-work': '今天辛苦了，收工！', 'rest-day': '今天休息，好好生活' }[snap.status]);
+  async function save(c: SalaryConfig) { await onConfig(c); setDirty(false); setTab('today'); setToast('已同步到云端'); }
+  return <div className="dashboard-shell"><aside className="sidebar"><div className="brand-lockup"><span className="brand-mark">¥</span><div><strong>薪水跳动</strong><small>SALARY PULSE / 02</small></div></div><div className="sidebar-status"><span className="signal-dot" />{hasConfig ? '收入时钟运行中' : '等待你的设置'}</div><nav><button aria-label="实时收入" className={tab === 'today' ? 'active' : ''} onClick={() => navigate('today')}><span>◉</span><div>实时收入<small>LIVE PULSE</small></div></button><button aria-label="收入明细" className={tab === 'details' ? 'active' : ''} onClick={() => navigate('details')}><span>◒</span><div>收入明细<small>BREAKDOWN</small></div></button><button aria-label="计薪设置" className={tab === 'settings' ? 'active' : ''} onClick={() => navigate('settings')}><span>⌘</span><div>计薪设置<small>CONFIGURE</small></div></button></nav><div className="sidebar-footer"><p>本账号数据已隔离保存<br />只对你本人可见</p><button onClick={onSignOut}>退出账号</button></div></aside><main className="dashboard-main"><header className="dashboard-header"><div className="mobile-brand"><span className="brand-mark">¥</span><strong>薪水跳动</strong></div><div className="header-meta"><span className="account-chip">{email}</span><button className="privacy-toggle" aria-pressed={hidden} onClick={() => setHidden(!hidden)}>{hidden ? '显示金额' : '隐藏金额'}</button><button className="logout-button" onClick={onSignOut}>退出</button></div></header><div className="content-wrap">{tab === 'today' && <TodayView hasConfig={hasConfig} openSettings={() => navigate('settings')} view={view} snap={snap} config={activeConfig} basis={basis} setBasis={setBasis} hidden={hidden} value={value} status={status} navigate={navigate} toast={toast} />}{tab === 'details' && <DetailsView hasConfig={hasConfig} openSettings={() => navigate('settings')} snap={snap} config={activeConfig} hidden={hidden} value={value} year={year} active={active} />}{tab === 'settings' && <SettingsView config={activeConfig} onSave={save} onCancel={() => { setDirty(false); setTab('today'); }} onDirty={setDirty} hidden={hidden} />}</div></main><nav className="mobile-nav"><button aria-label="实时收入" className={tab === 'today' ? 'active' : ''} onClick={() => navigate('today')}><span>◉</span>实时</button><button aria-label="收入明细" className={tab === 'details' ? 'active' : ''} onClick={() => navigate('details')}><span>◒</span>明细</button><button aria-label="计薪设置" className={tab === 'settings' ? 'active' : ''} onClick={() => navigate('settings')}><span>⌘</span>设置</button></nav>{pending && <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true"><p className="kicker">UNSAVED CHANGES</p><h2>修改还没有保存</h2><p>离开后，本次修改会丢弃，已同步的设置不受影响。</p><div className="modal-actions"><button className="button-primary" autoFocus onClick={() => setPending(null)}>继续编辑</button><button onClick={() => { setDirty(false); setTab(pending); setPending(null); }}>放弃并离开</button></div></section></div>}</div>;
+}
+
+function TodayView({ hasConfig, openSettings, view, snap, config, basis, setBasis, hidden, value, status, navigate, toast }: { hasConfig: boolean; openSettings: () => void; view: Ticker; snap: Ticker; config: SalaryConfig; basis: 'net' | 'gross'; setBasis: (v: 'net' | 'gross') => void; hidden: boolean; value: (n: number, d?: number) => string; status: string; navigate: (t: Tab) => void; toast: string }) {
+  if (!hasConfig) return <section className="empty-state"><p className="kicker">YOUR DASHBOARD IS READY</p><h1>先设置你的收入，<em>再让它跳起来。</em></h1><p>填写一次月薪和计薪方式，之后每次登录都会从云端恢复。</p><button className="button-primary" onClick={openSettings}>开始设置</button></section>;
+  return <><div className="page-title compact"><div><p className="kicker">{new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })}</p><h1>今天的收入，<em>正在发生。</em></h1></div><span className="live-badge"><i />LIVE</span></div><section className="earnings-hero"><div className="hero-topline"><span>今日累计 · {basis === 'net' ? '税后估算' : '税前分摊'}</span><div className="segmented dark"><button className={basis === 'net' ? 'active' : ''} onClick={() => setBasis('net')}>税后</button><button className={basis === 'gross' ? 'active' : ''} onClick={() => setBasis('gross')}>税前</button></div></div>{hidden ? <div className="hero-number masked">••••••</div> : <Odometer value={view.todayEarned} />}<div className="hero-status"><span className={snap.status === 'working' ? 'signal-dot' : 'rest-dot'} />{status}</div><div className="pulse-track">{Array.from({ length: 48 }, (_, i) => <i key={i} className={i / 48 < snap.dayProgress ? 'passed' : ''} />)}</div><div className="progress-caption"><span>{config.accrualMode === 'work' ? '今日计薪时段' : '今日时间'}已过 {Math.round(snap.dayProgress * 100)}%</span><span>{config.accrualMode === 'work' ? `${config.workStart} 起 · ${config.workHoursPerDay} 小时` : '00:00 — 24:00'}</span></div></section><section className="metric-grid"><div><span>每秒{basis === 'net' ? '到手' : '税前'}</span><strong>{value(view.perSecond, 4)}</strong></div><div><span>每小时</span><strong>{value(view.perHour)}</strong></div><div><span>今年已累计</span><strong>{value(view.yearToDate)}</strong></div></section><section className="month-panel"><div className="panel-heading"><div><p className="kicker">MONTHLY PROGRESS</p><h2>这个月的积累</h2></div><button onClick={() => navigate('details')}>看收入明细 <span>↗</span></button></div><strong className="month-amount">{value(view.monthEarned)}</strong><div className="month-subline"><span>预计到手 {value(view.monthlyTakeHome)}</span><span>{view.monthlyTakeHome ? Math.round(view.monthEarned / view.monthlyTakeHome * 100) : 0}%</span></div><progress max={view.monthlyTakeHome || 1} value={view.monthEarned} /></section>{toast && <p className="toast" role="status">{toast}</p>}<p className="disclaimer">跳动的是收入估算，不是到账通知。税费按当前设置模拟，以工资单为准。</p></>;
+}
+
+function DetailsView({ hasConfig, openSettings, snap, config, hidden, value, year, active }: { hasConfig: boolean; openSettings: () => void; snap: Ticker; config: SalaryConfig; hidden: boolean; value: (n: number, d?: number) => string; year: ReturnType<typeof simulateYear>; active: boolean }) {
+  if (!hasConfig) return <section className="empty-state"><p className="kicker">BREAKDOWN</p><h1>设置收入后，<em>这里会变得清楚。</em></h1><p>你的税前月薪、个人缴费和累计预扣个税会在这里拆开。</p><button className="button-primary" onClick={openSettings}>去设置收入</button></section>;
+  const rows = insuranceBreakdown(config); const max = Math.max(1, ...year.map(m => m.takeHome));
+  return <><div className="page-title"><p className="kicker">THE BREAKDOWN</p><h1>每一笔，都<em>看得懂。</em></h1><p>按当前设置估算 · {new Date().getMonth() + 1} 月</p></div><section className="receipt-panel"><div className="receipt-total"><span>本月预计到手</span><strong>{value(snap.monthlyTakeHome)}</strong></div><div className="breakdown-row"><span>税前月薪</span><b>{value(active ? config.monthlySalary : 0)}</b></div>{rows.map(r => <div className="breakdown-row" key={r.key}><span>{r.label}<small>个人比例 {(config.rates[r.key] * 100).toFixed(2)}% · 基数 {hidden ? '••••' : formatMoney(r.base)}</small></span><b>− {value(active ? r.amount : 0)}</b></div>)}<div className="breakdown-row"><span>本月预扣个税<small>普通累计预扣法</small></span><b>− {value(snap.monthTax)}</b></div></section><section className="annual-panel"><div className="panel-heading"><div><p className="kicker">YEAR AT A GLANCE</p><h2>全年到手预估</h2></div><strong>{value(snap.annualTakeHome)}</strong></div><p>假设月薪和缴费全年不变；当前设置会重算全年，不代表历史工资记录。</p><div className="month-chart">{year.map(m => <div key={m.month}><i className={m.month === new Date().getMonth() + 1 ? 'current' : ''} style={{ height: `${Math.max(3, m.takeHome / max * 100)}%` }} /><small>{m.month}</small></div>)}</div><details><summary>查看各月金额</summary>{year.map(m => <div className="breakdown-row" key={m.month}><span>{m.month} 月{m.employed ? '' : ' · 未起薪'}</span><b>{value(m.takeHome)}</b></div>)}</details></section><p className="disclaimer">个税采用普通累计预扣法，未包含全部优惠情形。城市缴费基数以工资单为准。</p></>;
+}
 
 export default function App() {
-  const { config, update, shareUrl } = useConfig();
-  const snap = useTicker(config);
-  const [panelOpen, setPanelOpen] = useState(false);
-
-  return (
-    <div className="app">
-      <div className="glow g1" />
-      <div className="glow g2" />
-
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-dot" />
-          <span className="brand-name">薪水跳动</span>
-          <span className="brand-sub">SALARY PULSE · 实时税后收入</span>
-        </div>
-        <button className="icon-btn" onClick={() => setPanelOpen(true)} aria-label="设置">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <circle cx="12" cy="12" r="3.2" />
-            <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55h.01a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z" />
-          </svg>
-        </button>
-      </header>
-
-      <main className="content">
-        <HeroCounter snap={snap} config={config} />
-        <StatCards snap={snap} />
-        <footer className="footnote">按中国个人所得税「累计预扣预缴」估算 · 配置存本机或随专属链接携带 · 仅供个人参考</footer>
-      </main>
-
-      <ConfigPanel open={panelOpen} onClose={() => setPanelOpen(false)} config={config} update={update} shareUrl={shareUrl} />
-    </div>
-  );
+  const [session, setSession] = useState<{ id: string; email: string } | null>(null); const [config, setConfig] = useState<SalaryConfig | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
+  useEffect(() => { let mounted = true; const apply = async (next: Awaited<ReturnType<typeof getAppSession>>) => { if (!mounted) return; if (!next) { setSession(null); setConfig(null); setLoading(false); return; } setSession({ id: next.user.id, email: next.user.email }); try { setConfig(await loadProfile(next.user.id)); } catch (e) { setError(e instanceof Error ? e.message : '无法读取云端设置。'); } setLoading(false); }; void getAppSession().then(apply); const unsubscribe = subscribeAuth(next => { void apply(next); }); return () => { mounted = false; unsubscribe(); }; }, []);
+  async function save(c: SalaryConfig) { if (!session) throw new Error('登录状态已失效，请重新登录。'); setConfig(await saveProfile(session.id, c)); }
+  async function exit() { await signOut(); setSession(null); setConfig(null); }
+  if (loading) return <div className="loading-screen"><span className="brand-mark">¥</span><p>正在连接你的收入时钟…</p></div>;
+  if (!session) return <><AuthScreen />{error && <p className="global-error" role="alert">{error}</p>}</>;
+  return <AppShell email={session.email} config={config} onConfig={save} onSignOut={exit} />;
 }

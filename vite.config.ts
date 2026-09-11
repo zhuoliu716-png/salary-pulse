@@ -4,6 +4,6 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   base: '/salary-pulse/',
   plugins: [react()],
-  server: { host: true, allowedHosts: true },
-  preview: { host: true, allowedHosts: true },
+  server: { host: '127.0.0.1', allowedHosts: true, proxy: { '/api': 'http://127.0.0.1:8787' } },
+  preview: { host: '127.0.0.1' },
 });

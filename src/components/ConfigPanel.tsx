@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { monthlyInsurance, simulateYear, insuranceBreakdown } from '../lib/tax';
 import type { InsuranceRates, SalaryConfig } from '../lib/tax';
 import { CITY_POLICIES, getPolicy } from '../lib/policy';
@@ -9,7 +8,7 @@ interface Props {
   onClose: () => void;
   config: SalaryConfig;
   update: (patch: Partial<SalaryConfig>) => void;
-  shareUrl: string;
+
 }
 
 const WEEKDAYS = [
@@ -39,31 +38,20 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  if (label === '工作日') return <div className="field"><div className="field-label">{label}</div>{children}</div>;
   return (
-    <div className="field">
+    <label className="field">
       <div className="field-label">{label}</div>
       {children}
-    </div>
+    </label>
   );
 }
 
-export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) {
+export function ConfigPanel({ open, onClose, config, update }: Props) {
   const months = simulateYear(config);
   const cur = months[new Date().getMonth()];
-  const insurance = monthlyInsurance(config);
+  const insurance = cur.employed ? monthlyInsurance(config) : 0;
   const rows = insuranceBreakdown(config);
-  const [copied, setCopied] = useState(false);
-
-  const copyShareUrl = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      window.prompt('自动复制失败，请手动长按复制：', shareUrl);
-    }
-  };
-
   const toggleWorkday = (iso: number) => {
     const days = config.workDays.includes(iso)
       ? config.workDays.filter((d) => d !== iso)
@@ -73,30 +61,14 @@ export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) 
 
   return (
     <>
-      <div className={open ? 'drawer-backdrop open' : 'drawer-backdrop'} onClick={onClose} />
-      <aside className={open ? 'drawer open' : 'drawer'}>
-        <div className="drawer-head">
-          <h2>薪酬设置</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="关闭">
-            ✕
-          </button>
-        </div>
 
-        <Section title="专属链接">
-          <button className="share-btn" onClick={copyShareUrl}>
-            {copied ? '已复制 ✓' : '复制携带配置的专属链接'}
-          </button>
-          <p className="share-hint">
-            配置已编码进链接。iPhone 桌面图标若记不住配置，用此链接重新「添加到主屏幕」，以后打开即自带你的参数；换设备打开同一链接也自动带上配置。链接含你的薪酬信息，仅发给自己。
-          </p>
-        </Section>
-
+      <section className="settings-fields" hidden={!open}>
         <Section title="收入">
           <Field label="税前月薪（元）">
             <input
               type="number"
               min={0}
-              value={config.monthlySalary || ''}
+              value={config.monthlySalary}
               onChange={(e) => update({ monthlySalary: Math.max(0, Number(e.target.value) || 0) })}
             />
           </Field>
@@ -104,7 +76,7 @@ export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) 
 
         <Section title="五险一金（个人缴纳）">
           <Field label="城市政策">
-            <select value={config.city} onChange={(e) => update({ city: e.target.value })}>
+            <select value={config.city} onChange={(e) => update({ city: e.target.value, baseMode: 'salary' })}>
               {CITY_POLICIES.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -116,13 +88,13 @@ export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) 
           {getPolicy(config.city).id !== 'none' && (
             <div className="mode-row">
               <div className="segmented">
-                <button
+                <button type="button"
                   className={config.baseMode === 'salary' ? 'active' : ''}
                   onClick={() => update({ baseMode: 'salary' })}
                 >
                   按实际工资
                 </button>
-                <button
+                <button type="button"
                   className={config.baseMode === 'minimum' ? 'active' : ''}
                   onClick={() => update({ baseMode: 'minimum' })}
                 >
@@ -168,6 +140,7 @@ export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) 
         </Section>
 
         <Section title="个税">
+          <p className="hint">按月薪不变、普通累计预扣法估算。不含年终奖、调薪、跨单位收入及首次就业优惠；以工资单为准。</p>
           <Field label="专项附加扣除（元/月，子女教育、房贷等合计）">
             <input
               type="number"
@@ -176,7 +149,7 @@ export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) 
               onChange={(e) => update({ specialDeduction: Math.max(0, Number(e.target.value) || 0) })}
             />
           </Field>
-          <Field label="入职月份（影响累计预扣预缴起点）">
+          <Field label="本单位起薪月份（此前收入按零估算）">
             <select
               value={config.startMonth}
               onChange={(e) => update({ startMonth: Number(e.target.value) })}
@@ -191,14 +164,15 @@ export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) 
         </Section>
 
         <Section title="计薪口径">
+          <p className="hint">两种模式都分摊当月收入。工作时段按每周排班，不自动处理节假日和调休；每日工时为从上班起连续计薪的时长，跨夜自动衔接。</p>
           <div className="segmented">
-            <button
+            <button type="button"
               className={config.accrualMode === 'work' ? 'active' : ''}
               onClick={() => update({ accrualMode: 'work' })}
             >
               仅工作时段
             </button>
-            <button
+            <button type="button"
               className={config.accrualMode === 'always' ? 'active' : ''}
               onClick={() => update({ accrualMode: 'always' })}
             >
@@ -210,8 +184,9 @@ export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) 
               <Field label="工作日">
                 <div className="weekdays">
                   {WEEKDAYS.map(({ iso, label }) => (
-                    <button
+                    <button type="button"
                       key={iso}
+                      aria-pressed={config.workDays.includes(iso)}
                       className={config.workDays.includes(iso) ? 'weekday active' : 'weekday'}
                       onClick={() => toggleWorkday(iso)}
                     >
@@ -249,7 +224,7 @@ export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) 
           <div className="breakdown">
             <div className="bd-row">
               <span>税前月薪</span>
-              <span>¥ {formatMoney(config.monthlySalary)}</span>
+              <span>¥ {formatMoney(cur.employed ? config.monthlySalary : 0)}</span>
             </div>
             {rows.map((r) => (
               <div className="bd-row" key={r.key}>
@@ -257,7 +232,7 @@ export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) 
                   {r.label} · 基数 {formatMoney(r.base)}
                   {r.clamped ? '（已调整）' : ''}
                 </span>
-                <span>− ¥ {formatMoney(r.amount)}</span>
+                <span>− ¥ {formatMoney(cur.employed ? r.amount : 0)}</span>
               </div>
             ))}
             <div className="bd-row">
@@ -274,7 +249,8 @@ export function ConfigPanel({ open, onClose, config, update, shareUrl }: Props) 
             </div>
           </div>
         </Section>
-      </aside>
+      <button type="button" className="text-button" onClick={onClose}>放弃本次修改</button>
+      </section>
     </>
   );
 }

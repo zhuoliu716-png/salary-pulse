@@ -24,8 +24,8 @@ const NO_LIMIT: BaseLimit = { floor: 0, cap: Infinity };
 export const CITY_POLICIES: CityPolicy[] = [
   {
     id: 'shenzhen',
-    name: '深圳',
-    note: '2026 年 7 月起执行 · 基数按险种自动封顶保底',
+    name: '深圳（旧版预设）',
+    note: '沿用旧项目参数，尚未核验当前政策；请对照工资单，或改用自定义基数',
     limits: {
       pension: { floor: 4775, cap: 27549 },
       medical: { floor: 6727, cap: 33633 },

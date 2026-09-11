@@ -8,3 +8,9 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 );
+
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  navigator.serviceWorker.register('/salary-pulse/sw.js').catch(() => {
+    window.dispatchEvent(new CustomEvent('offline-failed'));
+  });
+}

@@ -69,9 +69,9 @@ export function Odometer({ value, decimals = 2, fracDigits = 2 }: OdometerProps)
   const frac = decPart.slice(decimals);
 
   return (
-    <div className="odometer">
-      <span className="od-currency">¥</span>
-      <span className="od-main">
+    <div className="odometer" role="img" aria-label={`人民币 ${fixed} 元`}>
+      <span className="od-currency" aria-hidden="true">¥</span>
+      <span className="od-main" aria-hidden="true">
         {[...grouped].map((ch, i) =>
           /\d/.test(ch) ? (
             <RollingDigit key={`i${grouped.length - i}`} digit={+ch} />
@@ -86,7 +86,7 @@ export function Odometer({ value, decimals = 2, fracDigits = 2 }: OdometerProps)
           <RollingDigit key={`d${i}`} digit={+ch} />
         ))}
       </span>
-      {frac && <span className="od-frac">{frac}</span>}
+      {frac && <span className="od-frac" aria-hidden="true">{frac}</span>}
     </div>
   );
 }
