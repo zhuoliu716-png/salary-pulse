@@ -1,5 +1,5 @@
-const CACHE = 'salary-pulse-74ea35d20cef';
-const FILES = ["./","index.html","manifest.webmanifest","icon.png","assets/index-B6aqCRVY.css","assets/index-D4taakNf.js"];
+const CACHE = 'salary-pulse-5ef49a4c61e5';
+const FILES = ["./","index.html","manifest.webmanifest","icon.png","assets/index-B6aqCRVY.css","assets/index-DFL4YRnk.js"];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES.map(file => new Request(file, {cache: 'reload'}))))));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('salary-pulse-') && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', event => {
