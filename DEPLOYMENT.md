@@ -31,7 +31,7 @@ npm run dev:full
 
 它会同时启动 Vite 和 `127.0.0.1:8787` 本机账号 API。账号、会话和薪酬配置写入项目下的 `.local-data/accounts.json`，该目录已加入 `.gitignore`。密码不会明文保存，配置按用户 ID 隔离。
 
-本机模式适合现在直接使用和验收，不适合公开给朋友访问。要让朋友通过固定网址注册，需要配置 Supabase，再部署到 Vercel 或 Netlify。
+本机模式适合现在直接使用和验收。当前 GitHub Pages 公网版本在没有 Supabase 时会自动切换为浏览器本地账号模式：朋友可以各自注册和使用，账号数据隔离在各自浏览器中，但无法跨设备同步。要让同一个账号在多台设备恢复数据，需要配置 Supabase，再部署到 Vercel 或 Netlify。
 
 ## 3. 部署到 Vercel 或 Netlify
 
