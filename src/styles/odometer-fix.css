@@ -1,0 +1,33 @@
+.odometer {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.od-main {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.od-digit {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+
+.od-strip {
+  display: block;
+}
+
+.od-strip--static {
+  transition: none;
+}
+
+.od-cell {
+  display: block;
+  height: 1em;
+  line-height: 1;
+  text-align: center;
+}

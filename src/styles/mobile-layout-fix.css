@@ -1,0 +1,19 @@
+@media (max-width: 800px) {
+  .content-wrap {
+    padding-bottom: 170px;
+  }
+
+  .month-panel {
+    scroll-margin-bottom: 92px;
+  }
+
+  .earnings-hero .odometer,
+  .earnings-hero .hero-number {
+    min-height: 64px;
+    margin: 38px 0 24px;
+  }
+
+  .earnings-hero .pulse-track {
+    margin-top: 27px;
+  }
+}
